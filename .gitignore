@@ -1,0 +1,4 @@
+train_raw/
+train/
+extracted_titles_and_authors.csv
+out/

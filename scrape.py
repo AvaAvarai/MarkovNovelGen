@@ -3,21 +3,32 @@ from bs4 import BeautifulSoup
 import os
 import time
 
-# Function to get the top N works' URLs from Project Gutenberg
+# Function to get the top N works' URLs from Project Gutenberg with pagination support
 def get_top_works_urls(n):
-    base_url = "https://www.gutenberg.org/ebooks/search/?sort_order=downloads"
-    response = requests.get(base_url)
-    soup = BeautifulSoup(response.content, "html.parser")
-
-    # Extract the links to the top works
+    base_url = "https://www.gutenberg.org/ebooks/search/?sort_order=downloads&start_index="
     ebook_links = []
-    for link in soup.find_all('a', href=True):
-        href = link['href']
-        # Only grab links to individual books (i.e., /ebooks/<id>)
-        if '/ebooks/' in href and href.count('/') == 2:
-            ebook_links.append("https://www.gutenberg.org" + href)
-            if len(ebook_links) == n:
-                break
+    start_index = 1
+
+    while len(ebook_links) < n:
+        response = requests.get(base_url + str(start_index))
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        # Extract the links to the top works
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            # Only grab links to individual books (i.e., /ebooks/<id>)
+            if '/ebooks/' in href and href.count('/') == 2:
+                ebook_links.append("https://www.gutenberg.org" + href)
+                if len(ebook_links) == n:
+                    break
+        
+        # Increment start index to move to the next page
+        start_index += 25
+
+        # If no new links were added, break the loop (end of results)
+        if len(ebook_links) < start_index - 25:
+            break
+
     return ebook_links
 
 # Function to get the title and .txt link for a given work
@@ -30,6 +41,10 @@ def get_title_and_txt_link(ebook_url):
         # Extract title
         title_tag = soup.find('h1')
         title = title_tag.text.strip() if title_tag else "unknown_title"
+
+        # Skip "Offline Catalogs and Feeds"
+        if title.lower() == "offline catalogs and feeds":
+            return title, None
 
         # Find the .txt link
         for link in soup.find_all('a', href=True):
@@ -74,13 +89,19 @@ def main():
     folder_name = time.strftime("%Y%m%d_%H%M%S")
     os.makedirs(folder_name, exist_ok=True)
 
-    # Get the top N works URLs
+    # Get the top N works URLs with pagination
     ebook_urls = get_top_works_urls(n)
 
     for ebook_url in ebook_urls:
         print(f"Processing {ebook_url}...")
         # Get the title and text link
         title, txt_link = get_title_and_txt_link(ebook_url)
+        
+        # Skip any works with title "Offline Catalogs and Feeds"
+        if title.lower() == "offline catalogs and feeds":
+            print(f"Skipping: {title}")
+            continue
+
         if txt_link:
             print(f"Found .txt link for '{title}': {txt_link}")
             if not download_txt(txt_link, folder_name, title):
