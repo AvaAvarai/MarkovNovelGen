@@ -13,14 +13,14 @@ def load_texts(folder_path):
                 text += file.read() + " "
     return text
 
-# Function to clean and tokenize text (preserving sentence structure)
+# Function to clean text (for titles and authors)
 def clean_text(text):
-    text = re.sub(r'[^A-Za-z\s.!?]', ' ', text)  # Retain sentence-ending punctuation
+    text = re.sub(r'[^A-Za-z\s]', '', text)  # Remove non-alphabetic characters
     text = re.sub(r'\s+', ' ', text)  # Replace multiple spaces with a single space
-    return text
+    return text.strip()
 
-# Function to build a sentence-based Markov Chain model
-def build_markov_chain(text, order=2):
+# Function to build a word-based Markov Chain model (for titles and authors)
+def build_word_markov_chain(text, order=2):
     words = text.split()
     markov_chain = {}
     for i in range(len(words) - order):
@@ -31,7 +31,21 @@ def build_markov_chain(text, order=2):
         markov_chain[key].append(next_word)
     return markov_chain
 
-# Function to load titles and authors from CSV file
+# Function to build a sentence-based Markov Chain model (for content)
+def build_sentence_markov_chain(text, order=3):
+    sentences = re.split(r'(?<=[.!?])\s+', text)  # Split text into sentences
+    markov_chain = {}
+    for sentence in sentences:
+        words = sentence.split()
+        for i in range(len(words) - order):
+            key = tuple(words[i:i + order])
+            next_word = words[i + order]
+            if key not in markov_chain:
+                markov_chain[key] = []
+            markov_chain[key].append(next_word)
+    return markov_chain
+
+# Function to load titles and authors from CSV file and clean them
 def load_titles_and_authors(csv_file):
     titles = []
     authors = []
@@ -39,7 +53,7 @@ def load_titles_and_authors(csv_file):
         reader = csv.reader(file)
         next(reader)  # Skip header
         for row in reader:
-            title, author = row[1], row[2]
+            title, author = clean_text(row[1]), clean_text(row[2])
             if title != "Unknown Title" and author != "Unknown Author":
                 titles.append(title)
                 authors.append(author)
@@ -84,17 +98,16 @@ def main():
     csv_file = 'extracted_titles_and_authors.csv'
     titles_text, authors_text = load_titles_and_authors(csv_file)
     
-    # Step 2: Build Markov Chains for titles and authors
-    title_chain = build_markov_chain(titles_text, order=2)
-    author_chain = build_markov_chain(authors_text, order=2)
+    # Step 2: Build word-level Markov Chains for titles and authors
+    title_chain = build_word_markov_chain(titles_text, order=2)
+    author_chain = build_word_markov_chain(authors_text, order=2)
     
-    # Step 3: Load text files from a folder and clean the text
+    # Step 3: Load text files from a folder (for content generation)
     folder_path = input("Enter the path to the folder with text files: ")
     loaded_text = load_texts(folder_path)
-    clean_loaded_text = clean_text(loaded_text)
     
-    # Step 4: Build the Markov Chain model for the content
-    markov_chain = build_markov_chain(clean_loaded_text, order=3)
+    # Step 4: Build the sentence-level Markov Chain model for the content
+    sentence_markov_chain = build_sentence_markov_chain(loaded_text, order=4)
     
     # Step 5: Ask for the number of books to generate, their length, and the initial random seed
     n_books = int(input("Enter the number of books to generate: "))
@@ -109,12 +122,12 @@ def main():
     for i in range(n_books):
         current_seed = base_seed + i  # Unique seed for each book
         
-        # Generate the title and author using the Markov Chains
+        # Generate the title and author using the word-level Markov Chains
         book_title = generate_from_chain(title_chain, current_seed, length=5)
         author = generate_from_chain(author_chain, current_seed, length=2)
         
-        # Generate the text for the book
-        generated_text = generate_from_chain(markov_chain, current_seed, length=book_length)
+        # Generate the content using the sentence-level Markov Chain
+        generated_text = generate_from_chain(sentence_markov_chain, current_seed, length=book_length)
         
         if generated_text:
             save_book(generated_text, output_folder, book_title, author)
